@@ -16,6 +16,49 @@
       MAX: 20,         // Random range maximum
     },
     PAINTING_SPEED_ENABLED: false, // Off by default
+    // Advanced Speed Settings
+    ADVANCED_SPEED: {
+      ENABLED: false, // Enable advanced speed controls
+      MODE: "balanced", // "conservative", "balanced", "aggressive", "custom"
+      INTER_BATCH_DELAY: {
+        MIN: 100,        // Minimum delay between batches (ms)
+        MAX: 10000,      // Maximum delay between batches (ms)
+        DEFAULT: 60000,  // Default delay between batches (ms)
+      },
+      ADAPTIVE_TIMING: {
+        ENABLED: false, // Enable adaptive timing based on server response
+        BASE_DELAY: 1000,
+        RESPONSE_TIME_FACTOR: 1.5, // Multiply response time by this factor
+        MAX_ADAPTIVE_DELAY: 60000,
+      },
+      // TODO: WE DO NOT MAKE A CHARGED BASED PAINTING SPEED 
+      ERROR_HANDLING: {
+        TOKEN_ERROR_DELAY: 5000,     // Delay after token errors
+        NETWORK_ERROR_DELAY: 2000,   // Delay after network errors
+        RATE_LIMIT_DELAY: 180000,    // Delay after rate limiting
+        MAX_BACKOFF_DELAY: 60000,    // Maximum backoff delay
+      },
+      PRESETS: {
+        conservative: {
+          interBatchDelay: 2000,
+          adaptiveTiming: true,
+          chargeBasedSpeed: true,
+          maxBatchSize: 3,
+        },
+        balanced: {
+          interBatchDelay: 1000,
+          adaptiveTiming: false,
+          chargeBasedSpeed: false,
+          maxBatchSize: 5,
+        },
+        aggressive: {
+          interBatchDelay: 500,
+          adaptiveTiming: true,
+          chargeBasedSpeed: false,
+          maxBatchSize: 15,
+        }
+      }
+    },
     AUTO_CAPTCHA_ENABLED: true, // Turnstile generator enabled by default
     TOKEN_SOURCE: "generator", // "generator", "manual", or "hybrid" - default to generator
     COOLDOWN_CHARGE_THRESHOLD: 1, // Default wait threshold
@@ -1203,6 +1246,19 @@ function applyTheme() {
     initialSetupComplete: false, // Track if initial startup setup is complete (only happens once)
     overlayOpacity: CONFIG.OVERLAY.OPACITY_DEFAULT,
     blueMarbleEnabled: CONFIG.OVERLAY.BLUE_MARBLE_DEFAULT,
+    
+    // Advanced Speed Settings
+    advancedSpeedEnabled: CONFIG.ADVANCED_SPEED.ENABLED,
+    advancedSpeedMode: CONFIG.ADVANCED_SPEED.MODE,
+    interBatchDelay: CONFIG.ADVANCED_SPEED.INTER_BATCH_DELAY.DEFAULT,
+    adaptiveTimingEnabled: CONFIG.ADVANCED_SPEED.ADAPTIVE_TIMING.ENABLED,
+    adaptiveBaseDelay: CONFIG.ADVANCED_SPEED.ADAPTIVE_TIMING.BASE_DELAY,
+    adaptiveResponseFactor: CONFIG.ADVANCED_SPEED.ADAPTIVE_TIMING.RESPONSE_TIME_FACTOR,
+    adaptiveMaxDelay: CONFIG.ADVANCED_SPEED.ADAPTIVE_TIMING.MAX_ADAPTIVE_DELAY,
+    tokenErrorDelay: CONFIG.ADVANCED_SPEED.ERROR_HANDLING.TOKEN_ERROR_DELAY,
+    networkErrorDelay: CONFIG.ADVANCED_SPEED.ERROR_HANDLING.NETWORK_ERROR_DELAY,
+    rateLimitDelay: CONFIG.ADVANCED_SPEED.ERROR_HANDLING.RATE_LIMIT_DELAY,
+    maxBackoffDelay: CONFIG.ADVANCED_SPEED.ERROR_HANDLING.MAX_BACKOFF_DELAY,
   ditheringEnabled: true,
   // Advanced color matching settings
   colorMatchingAlgorithm: 'lab',
@@ -3711,6 +3767,156 @@ function applyTheme() {
             <input type="checkbox" id="enableSpeedToggle" ${CONFIG.PAINTING_SPEED_ENABLED ? 'checked' : ''} class="wplace-speed-checkbox"/>
             <span>Enable painting speed limit (batch size control)</span>
           </label>
+          
+          <!-- Advanced Speed Settings -->
+          <div class="wplace-advanced-speed-section" id="advancedSpeedSection">
+            <button type="button" class="wplace-advanced-speed-toggle" id="advancedSpeedToggle">
+              <i class="fas fa-chevron-right" id="advancedSpeedChevron"></i>
+              <span>Advanced Speed Settings</span>
+              <span class="wplace-advanced-speed-badge" id="advancedSpeedBadge">${state.advancedSpeedEnabled ? 'ON' : 'OFF'}</span>
+            </button>
+            
+            <div class="wplace-advanced-speed-content" id="advancedSpeedContent" style="display: none;">
+              <!-- Enable Advanced Speed -->
+              <label class="wplace-advanced-speed-enable">
+                <input type="checkbox" id="enableAdvancedSpeedToggle" ${state.advancedSpeedEnabled ? 'checked' : ''} class="wplace-advanced-speed-checkbox"/>
+                <span>Enable Advanced Speed Controls</span>
+              </label>
+              
+              <!-- Speed Mode Presets -->
+              <div class="wplace-speed-preset-section">
+                <label class="wplace-speed-preset-label">Speed Mode</label>
+                <div class="wplace-speed-preset-buttons">
+                  <button type="button" class="wplace-speed-preset-btn ${state.advancedSpeedMode === 'conservative' ? 'active' : ''}" data-mode="conservative">
+                    <i class="fas fa-shield-alt"></i>
+                    Conservative
+                  </button>
+                  <button type="button" class="wplace-speed-preset-btn ${state.advancedSpeedMode === 'balanced' ? 'active' : ''}" data-mode="balanced">
+                    <i class="fas fa-balance-scale"></i>
+                    Balanced
+                  </button>
+                  <button type="button" class="wplace-speed-preset-btn ${state.advancedSpeedMode === 'aggressive' ? 'active' : ''}" data-mode="aggressive">
+                    <i class="fas fa-rocket"></i>
+                    Aggressive
+                  </button>
+                  <button type="button" class="wplace-speed-preset-btn ${state.advancedSpeedMode === 'custom' ? 'active' : ''}" data-mode="custom">
+                    <i class="fas fa-cog"></i>
+                    Custom
+                  </button>
+                </div>
+                <p class="wplace-speed-preset-description">Choose a preset speed profile or create custom settings</p>
+              </div>
+              
+              <!-- Inter-Batch Delay Controls -->
+              <div class="wplace-inter-batch-delay-section">
+                <label class="wplace-inter-batch-delay-label">
+                  <i class="fas fa-clock"></i>
+                  Inter-Batch Delay: <span id="interBatchDelayValue">${Math.round(state.interBatchDelay)}ms</span>
+                </label>
+                <input type="range" id="interBatchDelaySlider" 
+                       min="${CONFIG.ADVANCED_SPEED.INTER_BATCH_DELAY.MIN}" 
+                       max="${CONFIG.ADVANCED_SPEED.INTER_BATCH_DELAY.MAX}" 
+                       value="${state.interBatchDelay}" 
+                       step="100" 
+                       class="wplace-inter-batch-delay-slider">
+                <div class="wplace-inter-batch-delay-labels">
+                  <span>Fast (${CONFIG.ADVANCED_SPEED.INTER_BATCH_DELAY.MIN}ms)</span>
+                  <span>Slow (${CONFIG.ADVANCED_SPEED.INTER_BATCH_DELAY.MAX}ms)</span>
+                </div>
+              </div>
+              
+              <!-- Adaptive Timing Controls -->
+              <div class="wplace-adaptive-timing-section">
+                <label class="wplace-adaptive-timing-toggle">
+                  <input type="checkbox" id="enableAdaptiveTimingToggle" ${state.adaptiveTimingEnabled ? 'checked' : ''} class="wplace-adaptive-timing-checkbox"/>
+                  <span>
+                    <i class="fas fa-brain"></i>
+                    Adaptive Timing
+                  </span>
+                </label>
+                <p class="wplace-adaptive-timing-description">Automatically adjust delays based on server response times</p>
+                
+                <div class="wplace-adaptive-timing-controls" id="adaptiveTimingControls" style="display: ${state.adaptiveTimingEnabled ? 'block' : 'none'};">
+                  <div class="wplace-adaptive-control-row">
+                    <label class="wplace-adaptive-control-label">
+                      Base Delay: <span id="adaptiveBaseDelayValue">${state.adaptiveBaseDelay}ms</span>
+                    </label>
+                    <input type="range" id="adaptiveBaseDelaySlider" 
+                           min="500" max="5000" value="${state.adaptiveBaseDelay}" step="250" 
+                           class="wplace-adaptive-control-slider">
+                  </div>
+                  
+                  <div class="wplace-adaptive-control-row">
+                    <label class="wplace-adaptive-control-label">
+                      Response Factor: <span id="adaptiveResponseFactorValue">${state.adaptiveResponseFactor}x</span>
+                    </label>
+                    <input type="range" id="adaptiveResponseFactorSlider" 
+                           min="1" max="3" value="${state.adaptiveResponseFactor}" step="0.1" 
+                           class="wplace-adaptive-control-slider">
+                  </div>
+                  
+                  <div class="wplace-adaptive-control-row">
+                    <label class="wplace-adaptive-control-label">
+                      Max Delay: <span id="adaptiveMaxDelayValue">${Math.round(state.adaptiveMaxDelay / 1000)}s</span>
+                    </label>
+                    <input type="range" id="adaptiveMaxDelaySlider" 
+                           min="10000" max="120000" value="${state.adaptiveMaxDelay}" step="5000" 
+                           class="wplace-adaptive-control-slider">
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Error Handling Delays -->
+              <div class="wplace-error-handling-section">
+                <div class="wplace-error-handling-title">
+                  <i class="fas fa-exclamation-triangle"></i>
+                  Error Handling Delays
+                </div>
+                
+                <div class="wplace-error-delay-grid">
+                  <div class="wplace-error-delay-item">
+                    <label>Token Error</label>
+                    <div class="wplace-error-delay-input-group">
+                      <input type="number" id="tokenErrorDelayInput" min="1000" max="30000" value="${state.tokenErrorDelay}" step="500" class="wplace-error-delay-input">
+                      <span>ms</span>
+                    </div>
+                  </div>
+                  
+                  <div class="wplace-error-delay-item">
+                    <label>Network Error</label>
+                    <div class="wplace-error-delay-input-group">
+                      <input type="number" id="networkErrorDelayInput" min="500" max="15000" value="${state.networkErrorDelay}" step="250" class="wplace-error-delay-input">
+                      <span>ms</span>
+                    </div>
+                  </div>
+                  
+                  <div class="wplace-error-delay-item">
+                    <label>Rate Limit</label>
+                    <div class="wplace-error-delay-input-group">
+                      <input type="number" id="rateLimitDelayInput" min="60000" max="600000" value="${state.rateLimitDelay}" step="30000" class="wplace-error-delay-input">
+                      <span>ms</span>
+                    </div>
+                  </div>
+                  
+                  <div class="wplace-error-delay-item">
+                    <label>Max Backoff</label>
+                    <div class="wplace-error-delay-input-group">
+                      <input type="number" id="maxBackoffDelayInput" min="10000" max="180000" value="${state.maxBackoffDelay}" step="5000" class="wplace-error-delay-input">
+                      <span>ms</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Reset to Defaults -->
+              <div class="wplace-advanced-speed-footer">
+                <button type="button" class="wplace-btn wplace-advanced-speed-reset" id="resetAdvancedSpeedBtn">
+                  <i class="fas fa-undo"></i>
+                  Reset to Defaults
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Notifications Section -->
@@ -4416,6 +4622,177 @@ function applyTheme() {
           state.paintingSpeed = speed;
           speedValue.textContent = `${speed} (batch size)`;
           saveBotSettings();
+        });
+      }
+
+      // Advanced Speed Settings Event Handlers
+      const advancedSpeedToggle = settingsContainer.querySelector("#advancedSpeedToggle");
+      const advancedSpeedContent = settingsContainer.querySelector("#advancedSpeedContent");
+      const advancedSpeedChevron = settingsContainer.querySelector("#advancedSpeedChevron");
+      
+      if (advancedSpeedToggle && advancedSpeedContent && advancedSpeedChevron) {
+        advancedSpeedToggle.addEventListener('click', () => {
+          const isExpanded = advancedSpeedContent.style.display !== 'none';
+          advancedSpeedContent.style.display = isExpanded ? 'none' : 'block';
+          advancedSpeedChevron.className = isExpanded ? 'fas fa-chevron-right' : 'fas fa-chevron-down';
+        });
+      }
+
+      const enableAdvancedSpeedToggle = settingsContainer.querySelector("#enableAdvancedSpeedToggle");
+      const advancedSpeedBadge = settingsContainer.querySelector("#advancedSpeedBadge");
+      if (enableAdvancedSpeedToggle && advancedSpeedBadge) {
+        enableAdvancedSpeedToggle.addEventListener('change', (e) => {
+          state.advancedSpeedEnabled = e.target.checked;
+          advancedSpeedBadge.textContent = e.target.checked ? 'ON' : 'OFF';
+          saveBotSettings();
+          Utils.showAlert(`Advanced speed controls ${e.target.checked ? 'enabled' : 'disabled'}`, "success");
+        });
+      }
+
+      // Speed Mode Preset Buttons
+      const speedPresetBtns = settingsContainer.querySelectorAll(".wplace-speed-preset-btn");
+      speedPresetBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const mode = e.currentTarget.dataset.mode;
+          state.advancedSpeedMode = mode;
+          
+          // Update button states
+          speedPresetBtns.forEach(b => b.classList.remove('active'));
+          e.currentTarget.classList.add('active');
+          
+          // Apply preset values if not custom
+          if (mode !== 'custom' && CONFIG.ADVANCED_SPEED.PRESETS[mode]) {
+            const preset = CONFIG.ADVANCED_SPEED.PRESETS[mode];
+            state.interBatchDelay = preset.interBatchDelay;
+            state.adaptiveTimingEnabled = preset.adaptiveTiming;
+            
+            // Update UI elements
+            const interBatchDelaySlider = settingsContainer.querySelector("#interBatchDelaySlider");
+            const interBatchDelayValue = settingsContainer.querySelector("#interBatchDelayValue");
+            const enableAdaptiveTimingToggle = settingsContainer.querySelector("#enableAdaptiveTimingToggle");
+            
+            if (interBatchDelaySlider && interBatchDelayValue) {
+              interBatchDelaySlider.value = preset.interBatchDelay;
+              interBatchDelayValue.textContent = `${Math.round(preset.interBatchDelay)}ms`;
+            }
+            if (enableAdaptiveTimingToggle) {
+              enableAdaptiveTimingToggle.checked = preset.adaptiveTiming;
+            }
+          }
+          
+          saveBotSettings();
+          Utils.showAlert(`Speed mode set to: ${mode.charAt(0).toUpperCase() + mode.slice(1)}`, "success");
+        });
+      });
+
+      // Inter-Batch Delay Slider
+      const interBatchDelaySlider = settingsContainer.querySelector("#interBatchDelaySlider");
+      const interBatchDelayValue = settingsContainer.querySelector("#interBatchDelayValue");
+      if (interBatchDelaySlider && interBatchDelayValue) {
+        interBatchDelaySlider.addEventListener('input', (e) => {
+          const delay = parseInt(e.target.value);
+          state.interBatchDelay = delay;
+          interBatchDelayValue.textContent = `${Math.round(delay)}ms`;
+          
+          // Switch to custom mode if user manually adjusts
+          if (state.advancedSpeedMode !== 'custom') {
+            state.advancedSpeedMode = 'custom';
+            speedPresetBtns.forEach(b => b.classList.remove('active'));
+            const customBtn = settingsContainer.querySelector('[data-mode="custom"]');
+            if (customBtn) customBtn.classList.add('active');
+          }
+          
+          saveBotSettings();
+        });
+      }
+
+      // Adaptive Timing Toggle
+      const enableAdaptiveTimingToggle = settingsContainer.querySelector("#enableAdaptiveTimingToggle");
+      const adaptiveTimingControls = settingsContainer.querySelector("#adaptiveTimingControls");
+      if (enableAdaptiveTimingToggle && adaptiveTimingControls) {
+        enableAdaptiveTimingToggle.addEventListener('change', (e) => {
+          state.adaptiveTimingEnabled = e.target.checked;
+          adaptiveTimingControls.style.display = e.target.checked ? 'block' : 'none';
+          saveBotSettings();
+        });
+      }
+
+      // Adaptive Timing Control Sliders
+      const adaptiveSliders = [
+        { id: "#adaptiveBaseDelaySlider", valueId: "#adaptiveBaseDelayValue", stateKey: "adaptiveBaseDelay", unit: "ms" },
+        { id: "#adaptiveResponseFactorSlider", valueId: "#adaptiveResponseFactorValue", stateKey: "adaptiveResponseFactor", unit: "x" },
+        { id: "#adaptiveMaxDelaySlider", valueId: "#adaptiveMaxDelayValue", stateKey: "adaptiveMaxDelay", unit: "s", divider: 1000 }
+      ];
+
+      adaptiveSliders.forEach(config => {
+        const slider = settingsContainer.querySelector(config.id);
+        const valueDisplay = settingsContainer.querySelector(config.valueId);
+        if (slider && valueDisplay) {
+          slider.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            state[config.stateKey] = value;
+            
+            const displayValue = config.divider ? Math.round(value / config.divider) : value;
+            valueDisplay.textContent = `${displayValue}${config.unit}`;
+            
+            // Switch to custom mode
+            if (state.advancedSpeedMode !== 'custom') {
+              state.advancedSpeedMode = 'custom';
+              speedPresetBtns.forEach(b => b.classList.remove('active'));
+              const customBtn = settingsContainer.querySelector('[data-mode="custom"]');
+              if (customBtn) customBtn.classList.add('active');
+            }
+            
+            saveBotSettings();
+          });
+        }
+      });
+
+      // Error Handling Delay Inputs
+      const errorDelayInputs = [
+        { id: "#tokenErrorDelayInput", stateKey: "tokenErrorDelay" },
+        { id: "#networkErrorDelayInput", stateKey: "networkErrorDelay" },
+        { id: "#rateLimitDelayInput", stateKey: "rateLimitDelay" },
+        { id: "#maxBackoffDelayInput", stateKey: "maxBackoffDelay" }
+      ];
+
+      errorDelayInputs.forEach(config => {
+        const input = settingsContainer.querySelector(config.id);
+        if (input) {
+          input.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            if (value >= parseInt(e.target.min) && value <= parseInt(e.target.max)) {
+              state[config.stateKey] = value;
+              saveBotSettings();
+            }
+          });
+        }
+      });
+
+      // Reset Advanced Speed Settings
+      const resetAdvancedSpeedBtn = settingsContainer.querySelector("#resetAdvancedSpeedBtn");
+      if (resetAdvancedSpeedBtn) {
+        resetAdvancedSpeedBtn.addEventListener('click', () => {
+          // Reset to default values
+          state.advancedSpeedEnabled = CONFIG.ADVANCED_SPEED.ENABLED;
+          state.advancedSpeedMode = CONFIG.ADVANCED_SPEED.MODE;
+          state.interBatchDelay = CONFIG.ADVANCED_SPEED.INTER_BATCH_DELAY.DEFAULT;
+          state.adaptiveTimingEnabled = CONFIG.ADVANCED_SPEED.ADAPTIVE_TIMING.ENABLED;
+          state.adaptiveBaseDelay = CONFIG.ADVANCED_SPEED.ADAPTIVE_TIMING.BASE_DELAY;
+          state.adaptiveResponseFactor = CONFIG.ADVANCED_SPEED.ADAPTIVE_TIMING.RESPONSE_TIME_FACTOR;
+          state.adaptiveMaxDelay = CONFIG.ADVANCED_SPEED.ADAPTIVE_TIMING.MAX_ADAPTIVE_DELAY;
+          state.tokenErrorDelay = CONFIG.ADVANCED_SPEED.ERROR_HANDLING.TOKEN_ERROR_DELAY;
+          state.networkErrorDelay = CONFIG.ADVANCED_SPEED.ERROR_HANDLING.NETWORK_ERROR_DELAY;
+          state.rateLimitDelay = CONFIG.ADVANCED_SPEED.ERROR_HANDLING.RATE_LIMIT_DELAY;
+          state.maxBackoffDelay = CONFIG.ADVANCED_SPEED.ERROR_HANDLING.MAX_BACKOFF_DELAY;
+          
+          saveBotSettings();
+          
+          // Recreate UI to update all values
+          settingsContainer.style.display = "none";
+          createUI();
+          
+          Utils.showAlert("Advanced speed settings reset to defaults", "success");
         });
       }
 
